@@ -9,41 +9,41 @@ def exactInitialCondition(x):
     return np.sin(x)
 
 
-def createTrainingsamples(nSamples):
-    nSamples = 2 * nSamples
+def createTrainingDataInitialCondition(nSamples):
+    initialT = 0.
     xSamples = np.linspace(0,
                            2. * np.pi,
                            nSamples,
                            endpoint=True,
                            dtype=np.float32)
     np.random.shuffle(xSamples)
-    tSamples = np.linspace(0, 1.0, nSamples, endpoint=True)
-    np.random.shuffle(tSamples)
-
-    initialT = 0.
-    xLeftBoundary = 0.
-    xRightBoundary = 2. * np.pi
 
     initialConditionSamples = np.zeros(shape=(nSamples, 2))
     initialConditionSamples[:, 0] = initialT
     initialConditionSamples[:, 1] = xSamples
+
+    trueInitialcondition = np.zeros(shape=(nSamples, 1))
+    trueInitialcondition[:,
+                         0] = exactInitialCondition(initialConditionSamples[:,
+                                                                            1])
+
+    return initialConditionSamples, trueInitialcondition
+
+
+def createTrainingDataBoundaryCondition(nSamples):
+    xLeftBoundary = 0.
+    xRightBoundary = 2. * np.pi
+    tSamples = np.linspace(0, 1.0, nSamples, endpoint=True)
+    np.random.shuffle(tSamples)
 
     boundaryConditionSamples = np.zeros(shape=(nSamples, 2))
     boundaryConditionSamples[:, 0] = tSamples
     boundaryConditionSamples[:, 1] = random.choices(
         [xLeftBoundary, xRightBoundary], k=nSamples)
 
-    trueInitialcondition = np.zeros(shape=(nSamples, 1))
-    trueInitialcondition[:,
-                         0] = exactInitialCondition(initialConditionSamples[:,
-                                                                            1])
     trueBoundaryData = np.zeros(shape=(nSamples, 1))
-    trainingData = np.append(initialConditionSamples,
-                             boundaryConditionSamples,
-                             axis=0)
-    referenceData = np.append(trueInitialcondition, trueBoundaryData, axis=0)
 
-    return trainingData, referenceData
+    return boundaryConditionSamples, trueBoundaryData
 
 
 def createResidualTrainingsamples(nSamples):
@@ -56,13 +56,12 @@ def createResidualTrainingsamples(nSamples):
     tSamples = np.linspace(0., 1.0, nSamples, endpoint=False)
     np.random.shuffle(tSamples)
 
-    collocationPoints = np.zeros(shape=(nSamples, 2))
+    residualSamples = np.zeros(shape=(nSamples, 2))
+    residualSamples[:, 0] = tSamples
+    residualSamples[:, 1] = xSamples
+    trueResidual = np.zeros(shape=(nSamples, 1))
 
-    collocationPoints[:, 0] = tSamples
-    collocationPoints[:, 1] = xSamples
-
-    residualTrainingData = collocationPoints
-    return residualTrainingData
+    return residualSamples, trueResidual
 
 
 class Pinn(keras.Model):
@@ -102,13 +101,25 @@ class Pinn(keras.Model):
     def train_step(self, data):
         # Unpack the data. Its structure depends on your model and
         # on what you pass to `fit()`.
-        x, y = data
-        self.ffn.trainable_weights
-        with tf.GradientTape() as tape:
-            predictions = self.ffn(x)
-            loss = self.loss_fn(y, predictions)
+        xInitial, yInitial = data[0][0], data[1][0]
+        xBoundary, yBoundary = data[0][1], data[1][1]
+        xResidual, yResidual = data[0][2], data[1][2]
+
+        with tf.GradientTape(persistent=True) as tape:
+            predictions = self.ffn(xInitial)
+            loss = self.loss_fn(yInitial, predictions)
+            predictions = self.ffn(xBoundary)
+            loss += self.loss_fn(yBoundary, predictions)
+            u = self.ffn(xResidual)
+            tape.watch(xResidual)
+            gradientU = tape.gradient(u, xResidual)
+            fluxU = 0.5 * u * u
+            gradientFluxU = tape.gradient(fluxU, xResidual)
+        # loss += self.loss_fn(yResidual, gradientU[:,0]+gradientFluxU[:,1] )
+
         grads = tape.gradient(loss, self.ffn.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.ffn.trainable_weights))
+        # del tape
         return {"loss": loss}
 
     def saveModel(self, path):
@@ -117,19 +128,32 @@ class Pinn(keras.Model):
 
 dimIn, dimHidden, dimOut, batchSize, nEpochs = 2, 10, 1, 100, 500
 nSamples = 200
-nSamplesResidual = 1000
-trainingData, trueOutput = createTrainingsamples(nSamples)
-residualTrainingData = createResidualTrainingsamples(nSamplesResidual)
+nSamplesResidual = 200
 
-# model = Pinn(dimIn, dimHidden, dimOut, batchSize, nEpochs)
+trainingDataInitialCondition, trueInitialData = createTrainingDataInitialCondition(
+    nSamples)
+trainingDataBoundaryCondition, trueBoundaryData = createTrainingDataBoundaryCondition(
+    nSamples)
+trainingDataResidual, trueResidual = createResidualTrainingsamples(
+    nSamplesResidual)
+
+trainingList = []
+trainingList.append(trainingDataInitialCondition)
+trainingList.append(trainingDataBoundaryCondition)
+trainingList.append(trainingDataResidual)
+
+trueDataList = []
+trueDataList.append(trueInitialData)
+trueDataList.append(trueBoundaryData)
+trueDataList.append(trueResidual)
 
 model = Pinn()
 model.compile(
-    optimizer=keras.optimizers.Adam(learning_rate=0.001),
+    optimizer=keras.optimizers.Adam(learning_rate=0.005),
     loss_fn=keras.losses.MeanSquaredError(),
 )
 
-model.fit(trainingData, trueOutput, epochs=nEpochs, batch_size=0)
+model.fit(trainingList, trueDataList, epochs=nEpochs, batch_size=None)
 
 # model.fit(trainingData, trueOutput,epochs=3, batch_size=2)
 model.saveModel("{0}/pinn".format(os.getcwd()))
