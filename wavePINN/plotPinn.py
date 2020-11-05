@@ -18,7 +18,7 @@ def exactFunction(x):
 
 model = keras.models.load_model("pinn")
 
-plotData = createPlotsamples(1000)
+plotData = createPlotsamples(1000,1.0)
 y = model.predict(plotData)
 yExact= exactFunction(plotData[:,1])
 

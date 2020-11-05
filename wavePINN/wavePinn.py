@@ -106,16 +106,16 @@ class Pinn(keras.Model):
         xResidual, yResidual = data[0][2], data[1][2]
 
         with tf.GradientTape(persistent=True) as tape:
+            tape.watch(xResidual)
             predictions = self.ffn(xInitial)
             loss = self.loss_fn(yInitial, predictions)
             predictions = self.ffn(xBoundary)
             loss += self.loss_fn(yBoundary, predictions)
             u = self.ffn(xResidual)
-            tape.watch(xResidual)
             gradientU = tape.gradient(u, xResidual)
             fluxU = 0.5 * u * u
             gradientFluxU = tape.gradient(fluxU, xResidual)
-        # loss += self.loss_fn(yResidual, gradientU[:,0]+gradientFluxU[:,1] )
+            loss += self.loss_fn(yResidual, gradientU[:,0]+gradientFluxU[:,1] )
 
         grads = tape.gradient(loss, self.ffn.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.ffn.trainable_weights))
@@ -147,13 +147,12 @@ trueDataList.append(trueInitialData)
 trueDataList.append(trueBoundaryData)
 trueDataList.append(trueResidual)
 
+tf.config.run_functions_eagerly(True)
 model = Pinn()
 model.compile(
     optimizer=keras.optimizers.Adam(learning_rate=0.005),
     loss_fn=keras.losses.MeanSquaredError(),
 )
-
 model.fit(trainingList, trueDataList, epochs=nEpochs, batch_size=None)
 
-# model.fit(trainingData, trueOutput,epochs=3, batch_size=2)
 model.saveModel("{0}/pinn".format(os.getcwd()))
