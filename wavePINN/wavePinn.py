@@ -6,23 +6,26 @@ import os
 
 
 def exactInitialCondition(x):
-    test = x
-    return np.exp(-((x[:, 0] - 0)**2 + (x[:, 1] - (-1))**2) / (2 * 0.2**2))
+    return np.exp(-( (x[:, 0] - 0)**2 + (x[:, 1] - (0) )**2) / (2 * 0.2**2))
 
 
 def createTrainingDataInitialCondition(nSamples):
     initialT = 0.
-    xSamples = np.linspace(-2, 2., nSamples, endpoint=True)
-    ySamples = np.linspace(-3.5, 0., nSamples, endpoint=True)
+    xSamples = np.linspace(-2., 2., nSamples, endpoint=True)
+    ySamples = np.linspace(-2., 2., nSamples, endpoint=True)
     np.random.shuffle(xSamples)
     np.random.shuffle(ySamples)
 
-    initialConditionSamples = np.zeros(shape=(nSamples, 3))
+    initialConditionSamples = np.zeros(shape=(nSamples**2, 3))
     initialConditionSamples[:, 0] = initialT
-    initialConditionSamples[:, 1] = xSamples
-    initialConditionSamples[:, 2] = ySamples
+    cnt = 0
+    for x in xSamples:
+        for y in ySamples:
+            initialConditionSamples[cnt, 1] = x
+            initialConditionSamples[cnt, 2] = y
+            cnt += 1
 
-    trueInitialcondition = np.zeros(shape=(nSamples, 1))
+    trueInitialcondition = np.zeros(shape=(nSamples**2, 1))
     trueInitialcondition[:, 0] = exactInitialCondition(
         initialConditionSamples[:, 1:3])
 
@@ -31,17 +34,17 @@ def createTrainingDataInitialCondition(nSamples):
 
 def createTrainingDataTimeDerivativeInitialCondition(nSamples):
     initialT = 0.
-    xSamples = np.linspace(-2, 2., nSamples, endpoint=True)
-    ySamples = np.linspace(-3.5, 0., nSamples, endpoint=True)
+    xSamples = np.linspace(-2., 2., nSamples**2, endpoint=True)
+    ySamples = np.linspace(-2., 2., nSamples**2, endpoint=True)
     np.random.shuffle(xSamples)
     np.random.shuffle(ySamples)
 
-    timeDerivativeInitialConditionSamples = np.zeros(shape=(nSamples, 3))
+    timeDerivativeInitialConditionSamples = np.zeros(shape=(nSamples**2, 3))
     timeDerivativeInitialConditionSamples[:, 0] = initialT
     timeDerivativeInitialConditionSamples[:, 1] = xSamples
     timeDerivativeInitialConditionSamples[:, 2] = ySamples
 
-    trueTimeDerivativeInitialcondition = np.zeros(shape=(nSamples, 1))
+    trueTimeDerivativeInitialcondition = np.zeros(shape=(nSamples**2, 1))
 
     return timeDerivativeInitialConditionSamples, trueTimeDerivativeInitialcondition
 
@@ -49,40 +52,36 @@ def createTrainingDataTimeDerivativeInitialCondition(nSamples):
 def createTrainingDataBoundaryCondition(nSamples):
     xLeftBoundary = -2.
     xRightBoundary = 2.
-    yLeftBoundary = -3.5
-    yRightBoundary = 0.
-    tSamples = np.linspace(0, 1.0, nSamples, endpoint=True)
+    yLeftBoundary = -2
+    yRightBoundary = 2.
+    tSamples = np.linspace(0, 1.0, nSamples**2, endpoint=True)
     np.random.shuffle(tSamples)
 
-    boundaryConditionSamples = np.zeros(shape=(nSamples, 3))
+    boundaryConditionSamples = np.zeros(shape=(nSamples**2, 3))
     boundaryConditionSamples[:, 0] = tSamples
     boundaryConditionSamples[:, 1] = random.choices(
-        [xLeftBoundary, xRightBoundary], k=nSamples)
+        [xLeftBoundary, xRightBoundary], k=nSamples**2)
     boundaryConditionSamples[:, 2] = random.choices(
-        [yLeftBoundary, yRightBoundary], k=nSamples)
+        [yLeftBoundary, yRightBoundary], k=nSamples**2)
 
-    trueBoundaryData = np.zeros(shape=(nSamples, 1))
+    trueBoundaryData = np.zeros(shape=(nSamples**2, 1))
 
     return boundaryConditionSamples, trueBoundaryData
 
 
 def createTrainingDataResidual(nSamples):
-    xSamples = np.linspace(-2., 2., nSamples, endpoint=False, dtype=np.float32)
-    ySamples = np.linspace(-3.5,
-                           0.,
-                           nSamples,
-                           endpoint=False,
-                           dtype=np.float32)
+    xSamples = np.linspace(-2., 2., nSamples**2, endpoint=False)
+    ySamples = np.linspace(-2., 2., nSamples**2, endpoint=False)
     np.random.shuffle(xSamples)
     np.random.shuffle(ySamples)
-    tSamples = np.linspace(0., 1.0, nSamples, endpoint=False)
+    tSamples = np.linspace(0., 1.0, nSamples**2, endpoint=False)
     np.random.shuffle(tSamples)
 
-    residualSamples = np.zeros(shape=(nSamples, 3))
+    residualSamples = np.zeros(shape=(nSamples**2, 3))
     residualSamples[:, 0] = tSamples
     residualSamples[:, 1] = xSamples
     residualSamples[:, 2] = ySamples
-    trueResidual = np.zeros(shape=(nSamples, 1))
+    trueResidual = np.zeros(shape=(nSamples**2, 1))
 
     return residualSamples, trueResidual
 
@@ -102,7 +101,6 @@ class Pinn(keras.Model):
         self.ffn = keras.Sequential(
             [
                 self.inputLayer,
-                keras.layers.Dense(self.dimHidden, activation="tanh"),
                 keras.layers.Dense(self.dimHidden, activation="tanh"),
                 keras.layers.Dense(self.dimHidden, activation="tanh"),
                 self.outputLayer,
@@ -140,12 +138,12 @@ class Pinn(keras.Model):
             secondOrderGradientU = tape.gradient(gradientU, dataResidual)
 
             loss = self.loss_fn(yInitial, predictionInitialCondition)
-            loss += self.loss_fn(yTimeDerivativeInitial, gradientUInitual[:,
-                                                                          0])
-            loss += self.loss_fn(yBoundary, predictionBoundaryCondition)
-            loss += self.loss_fn(
-                yResidual, secondOrderGradientU[:, 0] +
-                secondOrderGradientU[:, 1] + secondOrderGradientU[:, 2])
+            # loss += self.loss_fn(yTimeDerivativeInitial, gradientUInitual[:,
+            #                                                               0])
+            # loss += self.loss_fn(yBoundary, predictionBoundaryCondition)
+            # loss += self.loss_fn(
+            #     yResidual, secondOrderGradientU[:, 0] +
+            #     secondOrderGradientU[:, 1] + secondOrderGradientU[:, 2])
 
         grads = tape.gradient(loss, self.ffn.trainable_weights)
 
@@ -157,9 +155,9 @@ class Pinn(keras.Model):
         self.ffn.save(path)
 
 
-dimIn, dimHidden, dimOut, batchSize, nEpochs = 2, 10, 1, 100, 20
-nSamples = 200
-nSamplesResidual = 200
+dimIn, dimHidden, dimOut, batchSize, nEpochs = 2, 20, 1, 100, 100
+nSamples = 100
+nSamplesResidual = 100
 
 trainingDataInitialCondition, trueInitialData = createTrainingDataInitialCondition(
     nSamples)
@@ -187,6 +185,6 @@ model.compile(
     optimizer=keras.optimizers.Adam(learning_rate=0.005),
     loss_fn=keras.losses.MeanSquaredError(),
 )
-model.fit(trainingList, trueDataList, epochs=nEpochs, batch_size=20)
+model.fit(trainingList, trueDataList, epochs=nEpochs, batch_size=500)
 
 model.saveModel("{0}/pinn".format(os.getcwd()))
