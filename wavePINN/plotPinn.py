@@ -5,8 +5,8 @@ import numpy as np
 
 
 def createPlotsamples(nSamples, t=0.):
-    xSamples = np.linspace(-5., 5., nSamples, endpoint=True, dtype=np.float32)
-    ySamples = np.linspace(-5, 5., nSamples, endpoint=True, dtype=np.float32)
+    xSamples = np.linspace(-2., 2., nSamples, endpoint=True)
+    ySamples = np.linspace(-2., 2., nSamples, endpoint=True)
     plotSamples = np.zeros(shape=(nSamples * nSamples, 3))
     cnt = 0
     for x in xSamples:
@@ -27,8 +27,8 @@ fig = plt.figure()
 ax = fig.add_subplot()
 cb = ax.scatter(plotData[:, 1],
            plotData[:, 2],
-           vmin=-0.1,
-           vmax=.1,
+           vmin=0.,
+           vmax=0.2,
            s=35,
            c=y,
            marker='o',
