@@ -150,9 +150,9 @@ trueDataList.append(trueResidual)
 tf.config.run_functions_eagerly(True)
 model = Pinn()
 model.compile(
-    optimizer=keras.optimizers.Adam(learning_rate=0.005),
+    optimizer=keras.optimizers.Adam(learning_rate=0.001),
     loss_fn=keras.losses.MeanSquaredError(),
 )
-model.fit(trainingList, trueDataList, epochs=nEpochs, batch_size=None)
+model.fit(trainingList, trueDataList, epochs=nEpochs, batch_size=10,shuffle=True)
 
 model.saveModel("{0}/pinn".format(os.getcwd()))
